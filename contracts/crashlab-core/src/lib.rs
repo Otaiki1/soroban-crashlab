@@ -12,6 +12,9 @@ pub use seed_validator::{SeedSchema, SeedValidationError, Validate};
 pub mod scheduler;
 pub use scheduler::{Mutator, SchedulerError, WeightedScheduler};
 
+pub mod boundary;
+pub use boundary::{BoundaryMutator, generate_boundary_vectors};
+
 /// Wrapper for the legacy bit-flipper mutation logic.
 pub struct DefaultMutator;
 

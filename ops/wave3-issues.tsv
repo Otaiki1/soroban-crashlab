@@ -1,7 +1,7 @@
 title|complexity|area|type|summary|acceptance|status
 Implement seed schema validator|trivial|area:fuzzer|type:task|Validate incoming seed payloads against a strict schema before execution.|Reject malformed fields with clear errors and accept valid payloads.|
 Add deterministic PRNG adapter|medium|area:fuzzer|type:feature|Provide deterministic pseudo random generation keyed by seed id.|Same seed always produces same mutation stream across runs.|
-Create numeric boundary mutator for i128 and u128|medium|area:fuzzer|type:feature|Generate edge values near overflow and underflow ranges.|Mutator emits boundary vectors and test asserts include min max neighbors.|
+Create numeric boundary mutator for i128 and u128|medium|area:fuzzer|type:feature|Generate edge values near overflow and underflow ranges.|Mutator emits boundary vectors and test asserts include min max neighbors.|implemented
 Add Stellar address mutation strategy|medium|area:fuzzer|type:feature|Mutate account contract and muxed address formats with validity toggles.|Supports valid and invalid address generation paths with unit coverage.|
 Add vec and map size stress mutator|medium|area:fuzzer|type:feature|Exercise container growth and sparse key patterns for host function inputs.|Configurable min and max sizes with deterministic generation.|
 Add authorization mode matrix runner|high|area:fuzzer|type:feature|Run each seed across enforce record and record_allow_nonroot modes.|Output stores per mode result and mismatch summary.|
