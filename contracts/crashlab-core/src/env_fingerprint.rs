@@ -4,10 +4,11 @@
 //! so replay tooling can detect **material** host differences (OS, CPU architecture,
 //! process family) that may invalidate a strict reproduction.
 
+use serde::{Deserialize, Serialize};
 use std::env::consts::{ARCH, FAMILY, OS};
 
 /// Snapshot of the host environment at bundle capture time.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EnvironmentFingerprint {
     /// Operating system name (e.g. `linux`, `macos`, `windows`).
     pub os: String,
@@ -205,11 +206,12 @@ mod tests {
         let bundle = CaseBundle {
             seed,
             signature: CrashSignature {
-                category: "runtime-failure",
+                category: "runtime-failure".to_string(),
                 digest: 0,
                 signature_hash: 0,
             },
             environment: Some(recorded_fp.clone()),
+            failure_payload: Vec::new(),
         };
 
         let current = EnvironmentFingerprint::new("windows", "x86_64", "windows", "0.1.0");
@@ -228,11 +230,12 @@ mod tests {
                 payload: vec![1],
             },
             signature: CrashSignature {
-                category: "runtime-failure",
+                category: "runtime-failure".to_string(),
                 digest: 0,
                 signature_hash: 0,
             },
             environment: None,
+            failure_payload: Vec::new(),
         };
         let current = EnvironmentFingerprint::new("linux", "x86_64", "unix", "0.1.0");
         let report = check_bundle_replay_environment(&bundle, &current);

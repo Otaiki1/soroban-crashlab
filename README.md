@@ -50,6 +50,21 @@ cargo test
 
 `CaseBundle` can store an optional `EnvironmentFingerprint` (OS, CPU architecture, platform family, and `crashlab-core` version at capture time). Build bundles with `to_bundle_with_environment` when you want replay checks. At replay, call `EnvironmentFingerprint::capture()` and pass it to `check_bundle_replay_environment` or `CaseBundle::replay_environment_report`. If the recorded OS, architecture, or family differs from the current host, `ReplayEnvironmentReport::material_mismatch` is true and `warnings` lists explanatory messages (tool version differences alone are not treated as material).
 
+### Persist failing case bundles (JSON, versioned)
+
+`crashlab-core` can serialize a [`CaseBundle`](contracts/crashlab-core/src/lib.rs) to portable UTF-8 JSON with a top-level **`schema`** field (`CASE_BUNDLE_SCHEMA_VERSION`, currently `1`). The document includes the **seed**, **crash signature**, optional **environment** fingerprint, and optional **`failure_payload`** bytes (e.g. stderr / diagnostics).
+
+```rust
+use crashlab_core::{load_case_bundle_json, save_case_bundle_json, to_bundle, CaseSeed};
+
+let bundle = to_bundle(CaseSeed { id: 1, payload: vec![1, 2, 3] });
+let bytes = save_case_bundle_json(&bundle).expect("serialize");
+let roundtrip = load_case_bundle_json(&bytes).expect("deserialize");
+assert_eq!(roundtrip.seed, bundle.seed);
+```
+
+See [`contracts/crashlab-core/src/bundle_persist.rs`](contracts/crashlab-core/src/bundle_persist.rs) for `read_case_bundle_json` / `write_case_bundle_json` and error types.
+
 ### Publish curated Wave 3 issues
 
 ```bash
