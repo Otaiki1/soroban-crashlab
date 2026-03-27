@@ -37,6 +37,28 @@ pub use bundle_persist::{
 pub mod fixture_compat;
 pub use fixture_compat::{CompatReport, CompatWarning, check_bundle_fixtures, check_seed_fixtures};
 
+pub mod checkpoint;
+pub use checkpoint::{
+    load_run_checkpoint_json, save_run_checkpoint_json, CheckpointError, RunCheckpoint,
+    RUN_CHECKPOINT_SCHEMA_VERSION,
+};
+
+pub mod corpus;
+pub use corpus::{
+    corpus_archive_from_seeds, export_corpus_json, import_corpus_json, CorpusArchive, CorpusError,
+    CORPUS_ARCHIVE_SCHEMA_VERSION,
+};
+
+pub mod simulation;
+pub use simulation::{
+    run_simulation_with_timeout, timeout_crash_signature, RunMetadata, SimulationTimeoutConfig,
+};
+
+pub mod container_stress;
+pub use container_stress::{
+    generate_container_stress_grid, ContainerStressConfig, ContainerStressMutator,
+};
+
 /// Wrapper for the legacy bit-flipper mutation logic.
 pub struct DefaultMutator;
 

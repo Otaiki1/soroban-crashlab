@@ -46,6 +46,29 @@ cd contracts/crashlab-core
 cargo test
 ```
 
+### Run checkpoints (resume without redoing work)
+
+Persist a [`RunCheckpoint`](contracts/crashlab-core/src/checkpoint.rs) (JSON) with `next_seed_index` and reload it after an interruption. Use `RunCheckpoint::remaining(&seeds)` to iterate only pending seeds, and `advance_one` / `advance_by` after each completed item so resumed runs skip finished work.
+
+### Corpus export (portable seed archive)
+
+Export a deterministic, sorted corpus JSON (schema `CORPUS_ARCHIVE_SCHEMA_VERSION`) via `export_corpus_json` / `import_corpus_json`, or the CLI:
+
+```bash
+cd contracts/crashlab-core
+cargo run --bin export-corpus -- seeds.json > corpus-archive.json
+```
+
+Input may be a bare JSON array of seeds or a full archive document; output is always canonical sorted order for stable sharing and re-import.
+
+### Simulation timeout guardrails
+
+`run_simulation_with_timeout` wraps a host/contract simulation and returns `timeout_crash_signature` when wall time exceeds `SimulationTimeoutConfig::timeout_ms`. Surface the active limit in dashboards or logs with `RunMetadata::from_timeout_config`.
+
+### Vec / map container stress mutator
+
+[`ContainerStressMutator`](contracts/crashlab-core/src/container_stress.rs) encodes bounded vec vs map growth and sparse key stride into a 32-byte payload (configurable min/max per dimension). Register it with [`WeightedScheduler`](contracts/crashlab-core/src/scheduler.rs) alongside other mutators.
+
 ### Failing-case bundles and replay environment
 
 `CaseBundle` can store an optional `EnvironmentFingerprint` (OS, CPU architecture, platform family, and `crashlab-core` version at capture time). Build bundles with `to_bundle_with_environment` when you want replay checks. At replay, call `EnvironmentFingerprint::capture()` and pass it to `check_bundle_replay_environment` or `CaseBundle::replay_environment_report`. If the recorded OS, architecture, or family differs from the current host, `ReplayEnvironmentReport::material_mismatch` is true and `warnings` lists explanatory messages (tool version differences alone are not treated as material).
