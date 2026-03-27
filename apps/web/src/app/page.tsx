@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import RunHistoryTable from './RunHistoryTable';
 import Pagination from './Pagination';
 import { FuzzingRun, RunStatus } from './types';
+import CrashDetailDrawer from './CrashDetailDrawer';
 
 // Mock data for demonstration
 const MOCK_RUNS: FuzzingRun[] = Array.from({ length: 25 }, (_, i) => ({
@@ -15,6 +17,22 @@ const MOCK_RUNS: FuzzingRun[] = Array.from({ length: 25 }, (_, i) => ({
   cpuInstructions: Math.floor(400000 + Math.random() * 900000),
   memoryBytes: Math.floor(1_500_000 + Math.random() * 8_000_000),
   minResourceFee: Math.floor(500 + Math.random() * 5000),
+  crashDetail: i % 4 === 1
+    ? {
+      failureCategory: i % 8 === 1 ? 'Panic' : 'InvariantViolation',
+      signature: `sig:${1000 + i}:contract::transfer:assert_balance_nonnegative`,
+      payload: JSON.stringify({
+        contract: 'token',
+        method: 'transfer',
+        args: {
+          from: 'GABCD...1234',
+          to: 'GXYZ...7890',
+          amount: 999999999,
+        },
+      }, null, 2),
+      replayAction: `cargo run --bin crash-replay -- --run-id run-${1000 + i}`,
+    }
+    : null,
 })).reverse();
 
 const ITEMS_PER_PAGE = 10;
@@ -36,16 +54,21 @@ const isExpensiveRun = (run: FuzzingRun): boolean =>
   run.minResourceFee >= FEE_WARNING;
 
 export default function Home() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [selectedCardIndex, setSelectedCardIndex] = useState(0);
   const [showDetailView, setShowDetailView] = useState(false);
   const [showHelp, setShowHelp] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const cardsContainerRef = useRef<HTMLDivElement>(null);
+  const selectedRunId = searchParams.get('run');
 
   const totalPages = Math.ceil(MOCK_RUNS.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedRuns = MOCK_RUNS.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   const expensiveRuns = paginatedRuns.filter(isExpensiveRun);
+  const selectedRun = selectedRunId ? MOCK_RUNS.find((run) => run.id === selectedRunId) : null;
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -118,6 +141,22 @@ export default function Home() {
     setSelectedCardIndex(index);
     setShowDetailView(true);
   };
+
+  const updateSelectedRunInUrl = (runId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (runId) {
+      params.set('run', runId);
+    } else {
+      params.delete('run');
+    }
+
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  const handleOpenRunDrawer = (runId: string) => updateSelectedRunInUrl(runId);
+  const handleCloseRunDrawer = () => updateSelectedRunInUrl(null);
 
   return (
     <div className="flex flex-col items-center justify-center py-20 px-8 max-w-5xl mx-auto w-full">
@@ -209,7 +248,6 @@ export default function Home() {
             {MOCK_RUNS.length} Total Runs
           </div>
         </div>
-
         <div className="mb-5 border border-amber-200 dark:border-amber-900/50 rounded-xl p-4 bg-amber-50/70 dark:bg-amber-950/20">
           <div className="flex items-center justify-between gap-3 mb-3">
             <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200">Resource Fee Insight</h3>
@@ -236,8 +274,7 @@ export default function Home() {
             </ul>
           )}
         </div>
-
-        <RunHistoryTable runs={paginatedRuns} />
+        <RunHistoryTable runs={paginatedRuns} onSelectRun={handleOpenRunDrawer} />
         <Pagination
           currentPage={currentPage}
           totalPages={totalPages}
@@ -299,6 +336,10 @@ export default function Home() {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedRun && (
+        <CrashDetailDrawer run={selectedRun} onClose={handleCloseRunDrawer} />
       )}
 
       <div className="mt-16 text-center border-t border-black/[.08] dark:border-white/[.145] pt-12 w-full">

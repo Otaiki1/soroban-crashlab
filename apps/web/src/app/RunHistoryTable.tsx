@@ -1,11 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { FuzzingRun, RunStatus } from './types';
 
 interface RunHistoryTableProps {
     /** Array of fuzzing runs to display */
     runs: FuzzingRun[];
+    /** Called when a row is selected */
+    onSelectRun: (runId: string) => void;
 }
 
 /**
@@ -46,7 +47,7 @@ const StatusBadge = ({ status }: { status: RunStatus }) => {
 /**
  * Table component for displaying a list of fuzzing runs.
  */
-export default function RunHistoryTable({ runs }: RunHistoryTableProps) {
+export default function RunHistoryTable({ runs, onSelectRun }: RunHistoryTableProps) {
     if (runs.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center p-12 border border-dashed rounded-xl bg-zinc-50 dark:bg-zinc-900/20 border-zinc-200 dark:border-zinc-800">
@@ -73,14 +74,16 @@ export default function RunHistoryTable({ runs }: RunHistoryTableProps) {
                             <tr
                                 key={run.id}
                                 className="group hover:bg-zinc-50 dark:hover:bg-zinc-900/30 transition-colors cursor-pointer"
+                                onClick={() => onSelectRun(run.id)}
                             >
                                 <td className="px-6 py-4">
-                                    <Link
-                                        href={`/runs/${run.id}`}
+                                    <button
+                                        type="button"
+                                        onClick={() => onSelectRun(run.id)}
                                         className="text-sm font-mono text-blue-600 dark:text-blue-400 hover:underline decoration-blue-500/30 underline-offset-4"
                                     >
                                         {run.id}
-                                    </Link>
+                                    </button>
                                 </td>
                                 <td className="px-6 py-4">
                                     <StatusBadge status={run.status} />
