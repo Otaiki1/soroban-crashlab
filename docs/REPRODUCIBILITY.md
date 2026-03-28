@@ -159,6 +159,20 @@ let stable_pack = filter_ci_pack(&bundles, &detector, |seed| {
 export_to_ci(stable_pack);
 ```
 
+### Grouped regression suites
+
+`crashlab_core::export_rust_regression_suite` places each fixture into a submodule named from **domain risk** (`FailureClass` from `classify_failure` on the bundle seed) and **expected failure mode** (`bundle.signature.category`). That lets you run slices of the suite independently:
+
+```bash
+# All regression tests under the generated root module
+cargo test my_contract_regression
+
+# Only the auth + runtime-failure bucket
+cargo test my_contract_regression::regression_auth_runtime_failure
+```
+
+Use `crashlab_core::group_bundles_by_regression_group` or `regression_group_module_ident` if you need the same grouping in tooling without emitting Rust source.
+
 ## Troubleshooting Mismatched Replays
 
 ### Symptom: Signature Mismatch on Replay

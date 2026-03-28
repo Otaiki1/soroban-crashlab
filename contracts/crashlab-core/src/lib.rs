@@ -83,6 +83,12 @@ pub use scenario_export::{
     export_scenario_json,
 };
 
+pub mod regression_grouping;
+pub use regression_grouping::{
+    RegressionGroupKey, export_rust_regression_suite, group_bundles_by_regression_group,
+    regression_group_key, regression_group_keys_sorted, regression_group_module_ident,
+};
+
 pub mod simulation;
 pub use simulation::{
     RunMetadata, SimulationTimeoutConfig, run_simulation_with_timeout, timeout_crash_signature,
