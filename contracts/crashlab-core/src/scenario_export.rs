@@ -105,11 +105,11 @@ fn is_valid_rust_ident(name: &str) -> bool {
     chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
 }
 
-/// Exports a failing bundle as a Rust regression test fixture snippet.
+/// Builds a single `#[test] fn … { … }` regression block for `bundle`.
 ///
-/// The emitted snippet is deterministic and intended for inclusion in an
-/// integration test harness that depends on `crashlab-core`.
-pub fn export_rust_regression_fixture(
+/// Shared with [`crate::regression_grouping::export_rust_regression_suite`] so suite export
+/// stays byte-for-byte consistent with standalone fixture export.
+pub(crate) fn format_rust_regression_test_fn(
     bundle: &CaseBundle,
     test_name: &str,
 ) -> Result<String, String> {
@@ -164,6 +164,17 @@ fn {test_name}() {{
         digest = bundle.signature.digest,
         signature_hash = bundle.signature.signature_hash
     ))
+}
+
+/// Exports a failing bundle as a Rust regression test fixture snippet.
+///
+/// The emitted snippet is deterministic and intended for inclusion in an
+/// integration test harness that depends on `crashlab-core`.
+pub fn export_rust_regression_fixture(
+    bundle: &CaseBundle,
+    test_name: &str,
+) -> Result<String, String> {
+    format_rust_regression_test_fn(bundle, test_name)
 }
 
 #[cfg(test)]
