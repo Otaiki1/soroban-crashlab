@@ -7,12 +7,12 @@ import RunHistoryTable from './RunHistoryTable';
 import RunHistoryTableSkeleton from './RunHistoryTableSkeleton';
 import Pagination from './Pagination';
 import CrashDetailDrawer from './CrashDetailDrawer';
-import { FuzzingRun, RunStatus } from './types';
+import { FuzzingRun, RunStatus, RunArea, RunSeverity } from './types';
 import ReportModal from './ReportModal';
 import { generateMarkdownReport } from './report-utils';
 import CreateRunHeatmapPage55 from './create-run-heatmap-page-55';
 import AlertingSettingsPage54 from './implement-alerting-settings-page-54';
-import { FuzzingRun, RunStatus } from './types';
+
 import CrossRunBoardWidgets from './implement-cross-run-board-widgets-component';
 import CrossRunBoardCustomWidgets from './create-cross-run-board-custom-widgets-63';
 import RunClusterVisualization from './add-run-cluster-visualization';
@@ -162,7 +162,7 @@ function HomeContent() {
           ctrl.signal.addEventListener('abort', () => window.clearTimeout(t));
         });
         if (!cancelled) {
-          setRuns(buildMockRuns());
+          setRuns(MOCK_RUNS);
           setDataState('success');
         }
       } catch {
