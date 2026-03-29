@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { useState, useMemo, useCallback } from 'react';
 import { FuzzingRun, RunArea, RunSeverity } from './types';
 
