@@ -37,6 +37,7 @@ import AddRunStatusTimeline from './add-run-status-timeline';
 import AddExportRunJson from './add-export-run-json';
 import AddExportRunCsv from './add-export-run-csv';
 import IntegrateWebhookManagerForRunEvents from './integrate-webhook-manager-for-run-events';
+import FailureClassificationTaxonomy from './add-failure-classification-taxonomy';
 
 // Mock data for demonstration
 const MOCK_RUNS: FuzzingRun[] = Array.from({ length: 25 }, (_, i) => ({
@@ -677,6 +678,10 @@ function HomeContent() {
           showTimeline={true}
           showMetrics={true}
         />
+      </div>
+
+      <div className="mb-12 w-full">
+        <FailureClassificationTaxonomy runs={filteredRuns} />
       </div>
 
       <div className="mb-12 w-full">
