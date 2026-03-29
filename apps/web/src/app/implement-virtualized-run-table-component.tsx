@@ -258,9 +258,8 @@ export default function VirtualizedRunTable({
             <div
                 ref={scrollRef}
                 style={{ height: viewportHeight, overflowY: 'auto' }}
-                role="listbox"
+                role="region"
                 aria-label={`${runs.length} fuzzing runs`}
-                aria-rowcount={runs.length}
             >
                 {/* Inner spacer whose height equals the full un-virtualized list. */}
                 <div style={{ height: totalHeight, position: 'relative' }}>

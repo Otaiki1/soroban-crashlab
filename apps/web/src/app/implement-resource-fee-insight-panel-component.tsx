@@ -49,6 +49,66 @@ const ResourceFeeInsightPanel: React.FC<ResourceFeeInsightPanelProps> = ({
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | 'all'>('30d');
   const [viewMode, setViewMode] = useState<'overview' | 'trends' | 'breakdown'>('overview');
 
+  const calculateGroupStats = (groupRuns: FuzzingRun[]) => {
+    const fees = groupRuns.map(run => run.minResourceFee).filter(fee => fee > 0);
+    return {
+      averageFee: fees.length > 0 ? fees.reduce((sum, fee) => sum + fee, 0) / fees.length : 0,
+      totalRuns: groupRuns.length,
+      totalFees: fees.reduce((sum, fee) => sum + fee, 0)
+    };
+  };
+
+  const getWeekString = (date: Date) => {
+    const year = date.getFullYear();
+    const week = Math.ceil((date.getTime() - new Date(year, 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000));
+    return `${year}-W${week.toString().padStart(2, '0')}`;
+  };
+
+  const calculateTrends = useCallback((filteredRuns: FuzzingRun[]) => {
+    const dailyData = new Map<string, { fees: number[]; count: number }>();
+    const weeklyData = new Map<string, { fees: number[]; count: number }>();
+
+    filteredRuns.forEach(run => {
+      const date = new Date(run.startedAt || run.queuedAt || '');
+      const dateStr = date.toISOString().split('T')[0];
+      const weekStr = getWeekString(date);
+
+      if (!dailyData.has(dateStr)) {
+        dailyData.set(dateStr, { fees: [], count: 0 });
+      }
+      if (!weeklyData.has(weekStr)) {
+        weeklyData.set(weekStr, { fees: [], count: 0 });
+      }
+
+      if (run.minResourceFee > 0) {
+        dailyData.get(dateStr)!.fees.push(run.minResourceFee);
+        weeklyData.get(weekStr)!.fees.push(run.minResourceFee);
+      }
+      dailyData.get(dateStr)!.count++;
+      weeklyData.get(weekStr)!.count++;
+    });
+
+    const daily = Array.from(dailyData.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-30)
+      .map(([date, data]) => ({
+        date,
+        averageFee: data.fees.length > 0 ? data.fees.reduce((sum, fee) => sum + fee, 0) / data.fees.length : 0,
+        runCount: data.count
+      }));
+
+    const weekly = Array.from(weeklyData.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-12)
+      .map(([week, data]) => ({
+        week,
+        averageFee: data.fees.length > 0 ? data.fees.reduce((sum, fee) => sum + fee, 0) / data.fees.length : 0,
+        runCount: data.count
+      }));
+
+    return { daily, weekly };
+  }, []);
+
   const calculateStats = useCallback((): ResourceFeeStats => {
     const filteredRuns = runs.filter(run => {
       if (timeRange === 'all') return true;
@@ -121,69 +181,9 @@ const ResourceFeeInsightPanel: React.FC<ResourceFeeInsightPanelProps> = ({
       severityBreakdown,
       trends
     };
-  }, [runs, timeRange]);
+  }, [runs, timeRange, calculateTrends]);
 
-  const calculateGroupStats = (groupRuns: FuzzingRun[]) => {
-    const fees = groupRuns.map(run => run.minResourceFee).filter(fee => fee > 0);
-    return {
-      averageFee: fees.length > 0 ? fees.reduce((sum, fee) => sum + fee, 0) / fees.length : 0,
-      totalRuns: groupRuns.length,
-      totalFees: fees.reduce((sum, fee) => sum + fee, 0)
-    };
-  };
-
-  const calculateTrends = (filteredRuns: FuzzingRun[]) => {
-    const dailyData = new Map<string, { fees: number[]; count: number }>();
-    const weeklyData = new Map<string, { fees: number[]; count: number }>();
-
-    filteredRuns.forEach(run => {
-      const date = new Date(run.startedAt || run.queuedAt || '');
-      const dateStr = date.toISOString().split('T')[0];
-      const weekStr = getWeekString(date);
-
-      if (!dailyData.has(dateStr)) {
-        dailyData.set(dateStr, { fees: [], count: 0 });
-      }
-      if (!weeklyData.has(weekStr)) {
-        weeklyData.set(weekStr, { fees: [], count: 0 });
-      }
-
-      if (run.minResourceFee > 0) {
-        dailyData.get(dateStr)!.fees.push(run.minResourceFee);
-        weeklyData.get(weekStr)!.fees.push(run.minResourceFee);
-      }
-      dailyData.get(dateStr)!.count++;
-      weeklyData.get(weekStr)!.count++;
-    });
-
-    const daily = Array.from(dailyData.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .slice(-30)
-      .map(([date, data]) => ({
-        date,
-        averageFee: data.fees.length > 0 ? data.fees.reduce((sum, fee) => sum + fee, 0) / data.fees.length : 0,
-        runCount: data.count
-      }));
-
-    const weekly = Array.from(weeklyData.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .slice(-12)
-      .map(([week, data]) => ({
-        week,
-        averageFee: data.fees.length > 0 ? data.fees.reduce((sum, fee) => sum + fee, 0) / data.fees.length : 0,
-        runCount: data.count
-      }));
-
-    return { daily, weekly };
-  };
-
-  const getWeekString = (date: Date) => {
-    const year = date.getFullYear();
-    const week = Math.ceil((date.getTime() - new Date(year, 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000));
-    return `${year}-W${week.toString().padStart(2, '0')}`;
-  };
-
-  const stats = useMemo(calculateStats, [calculateStats]);
+  const stats = useMemo(() => calculateStats(), [calculateStats]);
 
   const formatFee = (fee: number) => {
     return fee.toLocaleString('en-US', { maximumFractionDigits: 2 });
@@ -253,7 +253,7 @@ const ResourceFeeInsightPanel: React.FC<ResourceFeeInsightPanelProps> = ({
       <div className="bg-white p-4 rounded-lg border border-gray-200">
         <h4 className="text-sm font-semibold text-gray-900 mb-3">Daily Trends (Last 30 days)</h4>
         <div className="h-64 flex items-end justify-between gap-1">
-          {stats.trends.daily.map((day, index) => {
+          {stats.trends.daily.map((day) => {
             const maxFee = Math.max(...stats.trends.daily.map(d => d.averageFee));
             const height = maxFee > 0 ? (day.averageFee / maxFee) * 100 : 0;
             return (
@@ -357,7 +357,7 @@ const ResourceFeeInsightPanel: React.FC<ResourceFeeInsightPanelProps> = ({
         <div className="flex items-center gap-2">
           <select
             value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value as any)}
+            onChange={(e) => setTimeRange(e.target.value as '7d' | '30d' | '90d' | 'all')}
             className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="7d">Last 7 days</option>

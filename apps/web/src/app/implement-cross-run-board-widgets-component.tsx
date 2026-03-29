@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { FuzzingRun, RunStatus } from "./types";
+import { FuzzingRun } from "./types";
 
 interface CrossRunBoardWidgetsProps {
   runs?: FuzzingRun[];

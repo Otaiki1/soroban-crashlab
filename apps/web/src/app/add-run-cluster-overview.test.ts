@@ -1,4 +1,4 @@
-import { computeClusterStats, ClusterStats, getHealthColor } from './add-run-cluster-overview';
+import { computeClusterStats, getHealthColor } from './add-run-cluster-overview';
 import { FuzzingRun } from './types';
 
 // Helper to build a minimal FuzzingRun
@@ -218,8 +218,6 @@ describe('Property 1: HealthScore is always in [0, 100]', () => {
  */
 describe('Property 2: HealthScore is 100 when total is zero', () => {
   it('healthScore is 100 for an area when no runs belong to that area', () => {
-    const allAreas: FuzzingRun['area'][] = ['auth', 'state', 'budget', 'xdr'];
-
     fc.assert(
       fc.property(
         runAreaArb,

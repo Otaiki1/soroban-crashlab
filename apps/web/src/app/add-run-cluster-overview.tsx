@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { FuzzingRun, RunArea, RunStatus, RunSeverity } from './types';
+import { FuzzingRun, RunArea } from './types';
 
 interface RunClusterOverviewProps {
   runs: FuzzingRun[];

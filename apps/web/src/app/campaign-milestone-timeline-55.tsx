@@ -31,7 +31,6 @@ export default function CampaignMilestoneTimeline({
 
   // Simulate incremental event generation
   const generateNewEvent = useCallback((): MilestoneEvent | null => {
-    const eventTypes: MilestoneEventType[] = ['failure_discovered', 'campaign_pause', 'campaign_resume'];
     const severities = ['critical', 'high', 'medium', 'low'] as const;
     
     // 60% chance of failure discovered, 20% pause, 20% resume

@@ -32,6 +32,7 @@ import VirtualizedRunTable from './implement-virtualized-run-table-component';
 import ReportingTemplatesManager from './add-reporting-templates-manager';
 import AutomatedRegressionDeployIntegration from './integrate-automated-regression-deploy-integration';
 import ReportGenerator from './add-report-generator';
+import WidgetLayoutEditor from './implement-widget-layout-editor-component';
 import AddRunStatusTimeline from './add-run-status-timeline';
 import AddExportRunJson from './add-export-run-json';
 import AddExportRunCsv from './add-export-run-csv';
@@ -711,6 +712,12 @@ function HomeContent() {
       {isMaintainer && (
         <div className="mb-12 w-full">
           <AlertingSettingsPage54 />
+        </div>
+      )}
+
+      {isMaintainer && (
+        <div className="mb-12 w-full">
+          <WidgetLayoutEditor />
         </div>
       )}
 
