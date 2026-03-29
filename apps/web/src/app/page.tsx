@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import RunHistoryTable from './RunHistoryTable';
+import RunHistoryTable from './implement-run-history-table-component';
 import RunHistoryTableSkeleton from './RunHistoryTableSkeleton';
 import Pagination from './Pagination';
 import CrashDetailDrawer from './CrashDetailDrawer';
@@ -38,6 +38,12 @@ import AddExportRunJson from './add-export-run-json';
 import AddExportRunCsv from './add-export-run-csv';
 import IntegrateWebhookManagerForRunEvents from './integrate-webhook-manager-for-run-events';
 import LogViewer from './implement-log-viewer-component';
+import AddAccessibleKeyboardNavBlueprint from './add-accessible-keyboard-nav-blueprint';
+import ArtifactExplorer from './add-artifact-explorer';
+import RunSeverityFilter from './add-run-filtering-by-severity';
+import AddRunTimeline from './add-run-timeline';
+import OnboardingChecklistModal from './implement-onboarding-checklist-modal-component';
+import FailureClassificationTaxonomy from './add-failure-classification-taxonomy';
 
 // Mock data for demonstration
 const MOCK_RUNS: FuzzingRun[] = Array.from({ length: 25 }, (_, i) => ({
@@ -73,6 +79,8 @@ const CPU_WARNING = 900_000;
 const MEMORY_WARNING = 7_000_000;
 const FEE_WARNING = 3_000;
 const STATUS_OPTIONS: Array<'all' | RunStatus> = ['all', 'running', 'completed', 'failed', 'cancelled'];
+const ONBOARDING_SEEN_STORAGE_KEY = 'crashlab:onboarding-checklist-seen:v1';
+const ONBOARDING_DISMISSED_STORAGE_KEY = 'crashlab:onboarding-checklist-dismissed:v1';
 
 const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
@@ -102,6 +110,7 @@ function HomeContent() {
   const [selectedCardIndex, setSelectedCardIndex] = useState(0);
   const [showDetailView, setShowDetailView] = useState(false);
   const [showHelp, setShowHelp] = useState(true);
+  const [showOnboardingChecklist, setShowOnboardingChecklist] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [reportRun, setReportRun] = useState<FuzzingRun | null>(null);
   const cardsContainerRef = useRef<HTMLDivElement>(null);
@@ -111,6 +120,9 @@ function HomeContent() {
   const selectedRunId = searchParams.get('run');
   const statusFilter = STATUS_OPTIONS.includes((searchParams.get('status') ?? 'all') as 'all' | RunStatus)
     ? ((searchParams.get('status') ?? 'all') as 'all' | RunStatus)
+    : 'all';
+  const severityFilter = (['all', 'low', 'medium', 'high', 'critical'].includes(searchParams.get('severity') ?? 'all'))
+    ? (searchParams.get('severity') ?? 'all') as 'all' | RunSeverity
     : 'all';
   const expensiveOnly = searchParams.get('expensive') === '1';
   const pageParam = Number.parseInt(searchParams.get('page') ?? '1', 10);
@@ -144,6 +156,9 @@ function HomeContent() {
       if (statusFilter !== 'all' && run.status !== statusFilter) {
         return false;
       }
+      if (severityFilter !== 'all' && run.severity !== severityFilter) {
+        return false;
+      }
       if (expensiveOnly && !isExpensiveRun(run)) {
         return false;
       }
@@ -154,6 +169,24 @@ function HomeContent() {
     () => toStableQueryString(new URLSearchParams(searchParams.toString())),
     [searchParams],
   );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const hasSeenOnboarding = localStorage.getItem(ONBOARDING_SEEN_STORAGE_KEY) === 'true';
+        const hasDismissedOnboarding = localStorage.getItem(ONBOARDING_DISMISSED_STORAGE_KEY) === 'true';
+
+        if (!hasSeenOnboarding && !hasDismissedOnboarding) {
+          localStorage.setItem(ONBOARDING_SEEN_STORAGE_KEY, 'true');
+          setShowOnboardingChecklist(true);
+        }
+      } catch {
+        setShowOnboardingChecklist(true);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const totalPages = Math.max(1, Math.ceil(filteredRuns.length / ITEMS_PER_PAGE));
   const clampedPage = Math.min(currentPage, totalPages);
@@ -320,10 +353,41 @@ function HomeContent() {
     setShowDetailView(true);
   };
 
+  const handleOpenOnboardingChecklist = useCallback(() => {
+    setShowOnboardingChecklist(true);
+    try {
+      localStorage.setItem(ONBOARDING_SEEN_STORAGE_KEY, 'true');
+      localStorage.setItem(ONBOARDING_DISMISSED_STORAGE_KEY, 'false');
+    } catch {
+      // ignore storage write errors
+    }
+  }, []);
+
+  const handleCloseOnboardingChecklist = useCallback(() => {
+    setShowOnboardingChecklist(false);
+    try {
+      localStorage.setItem(ONBOARDING_DISMISSED_STORAGE_KEY, 'true');
+    } catch {
+      // ignore storage write errors
+    }
+  }, []);
+
   return (
-    <div className="flex flex-col items-center justify-center py-20 px-8 max-w-5xl mx-auto w-full">
+    <div className="min-h-screen w-full">
+      <AddAccessibleKeyboardNavBlueprint />
+      <div id="main-content" className="flex flex-col items-center justify-center py-20 px-8 max-w-5xl mx-auto w-full">
       {/* Role toggle */}
-      <div className="w-full flex justify-end mb-6">
+      <div className="w-full flex flex-wrap justify-end gap-3 mb-6">
+        <button
+          type="button"
+          onClick={handleOpenOnboardingChecklist}
+          className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200 dark:hover:border-blue-800 dark:hover:bg-blue-950/60"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Onboarding checklist
+        </button>
         <MaintainerToggle
           isMaintainer={isMaintainer}
           onToggle={toggleMaintainerMode}
@@ -487,6 +551,7 @@ function HomeContent() {
       {dataState === 'success' && (
         <>
           <TimelineScrubber runs={runs} onSelectRun={handleOpenRunDrawer} />
+          <AddRunTimeline runs={runs} onSelectRun={handleOpenRunDrawer} />
           <div className="mt-12 w-full">
             <AddRunStatusTimeline runs={runs} />
           </div>
@@ -501,7 +566,7 @@ function HomeContent() {
       )}
       {dataState === 'success' && <RunClusterOverview runs={runs} />}
 
-      <div className="w-full mb-8">
+      <div id="recent-runs" className="w-full mb-8 scroll-mt-8">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold">Recent Fuzzing Runs</h2>
           <div className="flex items-center gap-3">
@@ -537,7 +602,11 @@ function HomeContent() {
               <option value="cancelled">Cancelled</option>
             </select>
           </label>
-          <label className="inline-flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+          <RunSeverityFilter 
+            value={severityFilter} 
+            onChange={(val) => setQueryState({ severity: val === 'all' ? null : val, page: null })} 
+          />
+          <label className="inline-flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300 group cursor-pointer">
             <input
               type="checkbox"
               checked={expensiveOnly}
@@ -596,7 +665,7 @@ function HomeContent() {
           runs={paginatedRuns} 
           onSelectRun={handleOpenRunDrawer} 
           onViewReport={setReportRun} 
-          visibleColumns={visibleColumns}
+          visibleColumns={[...visibleColumns, 'severity', 'actions']}
         />
         {dataState === 'loading' && (
           <RunHistoryTableSkeleton rows={ITEMS_PER_PAGE} />
@@ -629,6 +698,10 @@ function HomeContent() {
           totalPages={totalPages}
           onPageChange={handlePageChange}
         />
+
+        <div className="mt-12 w-full">
+          <ArtifactExplorer />
+        </div>
 
         {/* Virtualized run table — renders all filtered runs without pagination */}
         {dataState === 'success' && filteredRuns.length > 0 && (
@@ -681,6 +754,10 @@ function HomeContent() {
           showTimeline={true}
           showMetrics={true}
         />
+      </div>
+
+      <div className="mb-12 w-full">
+        <FailureClassificationTaxonomy runs={filteredRuns} />
       </div>
 
       <div className="mb-12 w-full">
@@ -795,6 +872,11 @@ function HomeContent() {
         />
       )}
 
+      <OnboardingChecklistModal
+        isOpen={showOnboardingChecklist}
+        onClose={handleCloseOnboardingChecklist}
+      />
+
       {selectedRun && (
         <CrashDetailDrawer
           key={selectedRun.id}
@@ -831,6 +913,7 @@ function HomeContent() {
             Star the Repo
           </a>
         </div>
+      </div>
       </div>
     </div>
   );
