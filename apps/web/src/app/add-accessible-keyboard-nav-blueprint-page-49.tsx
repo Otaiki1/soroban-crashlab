@@ -56,11 +56,6 @@ export default function AccessibleKeyboardNavPage() {
     alert('Form submitted! Check console for data.');
   };
 
-  const handleReset = () => {
-    setFormData(initialFormData);
-    setTabOrder([]);
-  };
-
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">

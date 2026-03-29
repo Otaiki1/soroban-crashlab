@@ -4,7 +4,12 @@
 //! gracefully. The same signal can be driven in-process ([`CancelSignal::new`])
 //! or via [`request_cancel_run`] / [`cancel_requested`] when the runner and the
 //! `crashlab run cancel` CLI use a shared state directory.
+//!
+//! Use [`drive_run_partitioned`] with [`crate::worker_partition::WorkerPartition`] to
+//! execute only the seed indices assigned to one worker while preserving the same
+//! global iteration order and cancellation points as [`drive_run`].
 
+use crate::worker_partition::WorkerPartition;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -31,6 +36,27 @@ pub enum RunTerminalState {
     Completed { summary: RunSummary },
     Cancelled { summary: RunSummary },
     Failed { message: String },
+}
+
+/// Deterministic worker partitioning for parallel execution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct WorkerPartition {
+    pub index: u64,
+    pub total: u64,
+}
+
+impl WorkerPartition {
+    /// Creates a new `WorkerPartition`. Panics if `total == 0` or `index >= total`.
+    pub fn new(index: u64, total: u64) -> Self {
+        assert!(total > 0, "total workers must be greater than 0");
+        assert!(index < total, "worker index must be less than total workers");
+        Self { index, total }
+    }
+
+    /// Returns true if this worker is responsible for the given seed index.
+    pub const fn owns(&self, seed_index: u64) -> bool {
+        (seed_index % self.total) == self.index
+    }
 }
 
 /// Cooperative cancellation: in-process flag plus optional on-disk marker.
@@ -126,11 +152,14 @@ pub fn clear_cancel_request(run_id: RunId, base: impl AsRef<Path>) -> io::Result
 }
 
 /// Runs `work` for each seed index in `0..total`, stopping early when `signal` fires.
+/// If `partition` is provided, only seeds owned by that partition are processed, but
+/// `total_seeds` is evaluated completely for cancellation reasons.
 /// Returns [`RunTerminalState::Cancelled`] with a partial summary, or [`RunTerminalState::Completed`].
 pub fn drive_run<F>(
     _run_id: RunId,
     total_seeds: u64,
     signal: &CancelSignal,
+    partition: Option<WorkerPartition>,
     mut work: F,
 ) -> RunTerminalState
 where
@@ -138,6 +167,12 @@ where
 {
     let mut seeds_processed = 0u64;
     for seed_index in 0..total_seeds {
+        if let Some(p) = &partition {
+            if !p.owns(seed_index) {
+                continue;
+            }
+        }
+
         if signal.is_cancelled() {
             return RunTerminalState::Cancelled {
                 summary: RunSummary {
@@ -160,9 +195,50 @@ where
     }
 }
 
+/// Like [`drive_run`], but invokes `work` only for global seed indices owned by `partition`
+/// (`seed_index % num_workers == worker_index`). Still walks `0..total_seeds` in order so
+/// cancellation checks align with the single-worker timeline.
+pub fn drive_run_partitioned<F>(
+    _run_id: RunId,
+    total_seeds: u64,
+    partition: &WorkerPartition,
+    signal: &CancelSignal,
+    mut work: F,
+) -> RunTerminalState
+where
+    F: FnMut(u64) -> Result<(), String>,
+{
+    let mut seeds_processed = 0u64;
+    for seed_index in 0..total_seeds {
+        if signal.is_cancelled() {
+            return RunTerminalState::Cancelled {
+                summary: RunSummary {
+                    seeds_processed,
+                    cancelled_at_seed: Some(seed_index),
+                },
+            };
+        }
+        if !partition.owns_seed(seed_index) {
+            continue;
+        }
+        if let Err(message) = work(seed_index) {
+            return RunTerminalState::Failed { message };
+        }
+        seeds_processed += 1;
+    }
+
+    RunTerminalState::Completed {
+        summary: RunSummary {
+            seeds_processed,
+            cancelled_at_seed: None,
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::worker_partition::WorkerPartition;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn unique_tmp() -> PathBuf {
@@ -179,7 +255,7 @@ mod tests {
         let signal = CancelSignal::new(id);
         signal.cancel();
 
-        let outcome = drive_run(id, 100, &signal, |_i| Ok(()));
+        let outcome = drive_run(id, 100, &signal, None, |_i| Ok(()));
         match outcome {
             RunTerminalState::Cancelled { summary } => {
                 assert_eq!(summary.seeds_processed, 0);
@@ -194,7 +270,7 @@ mod tests {
         let id = RunId(2);
         let signal = CancelSignal::new(id);
         let mut seen = 0u64;
-        let outcome = drive_run(id, 5, &signal, |_i| {
+        let outcome = drive_run(id, 5, &signal, None, |_i| {
             seen += 1;
             Ok(())
         });
@@ -235,7 +311,7 @@ mod tests {
         let id = RunId(3);
         let signal = CancelSignal::with_state_dir(id, &base);
 
-        let outcome = drive_run(id, 10, &signal, |i| {
+        let outcome = drive_run(id, 10, &signal, None, |i| {
             if i == 2 {
                 request_cancel_run(id, &base).expect("request cancel");
             }
@@ -249,5 +325,77 @@ mod tests {
             other => panic!("expected cancelled, got {other:?}"),
         }
         let _ = fs::remove_dir_all(&base);
+    }
+    
+    #[test]
+    fn drive_run_respects_worker_partition() {
+        let id = RunId(4);
+        let signal = CancelSignal::new(id);
+        
+        let partition = WorkerPartition::new(1, 3);
+        
+        let mut seen = Vec::new();
+        let outcome = drive_run(id, 10, &signal, Some(partition), |i| {
+            seen.push(i);
+            Ok(())
+        });
+        
+        match outcome {
+            RunTerminalState::Completed { summary } => {
+                // 10 seeds: 0..9.
+                // Mod 3 gives:
+                // 0 -> 0
+                // 1 -> 1 *
+                // 2 -> 2
+                // 3 -> 0
+                // 4 -> 1 *
+                // 5 -> 2
+                // 6 -> 0
+                // 7 -> 1 *
+                // 8 -> 2
+                // 9 -> 0
+                assert_eq!(summary.seeds_processed, 3);
+                assert_eq!(seen, vec![1, 4, 7]);
+            }
+            other => panic!("expected completed, got {other:?}"),
+
+    #[test]
+    fn drive_run_partitioned_matches_seed_count_per_worker() {
+        let id = RunId(8);
+        let signal = CancelSignal::new(id);
+        let total = 23u64;
+        let n = 4u32;
+
+        let mut per_worker = vec![0u64; n as usize];
+        for w in 0..n {
+            let p = WorkerPartition::try_new(w, n).expect("partition");
+            let outcome = drive_run_partitioned(id, total, &p, &signal, |_i| Ok(()));
+            match outcome {
+                RunTerminalState::Completed { summary } => {
+                    per_worker[w as usize] = summary.seeds_processed;
+                }
+                other => panic!("expected completed, got {other:?}"),
+            }
+        }
+
+        assert_eq!(per_worker.iter().sum::<u64>(), total);
+    }
+
+    #[test]
+    fn drive_run_partitioned_observes_cancel_at_global_index() {
+        let id = RunId(11);
+        let signal = CancelSignal::new(id);
+        signal.cancel();
+
+        // Worker 1 of 3: owns indices 1, 4, 7, ... — first iteration is global index 0 (skip), then 1 (work).
+        let p = WorkerPartition::try_new(1, 3).expect("partition");
+        let outcome = drive_run_partitioned(id, 20, &p, &signal, |_i| Ok(()));
+        match outcome {
+            RunTerminalState::Cancelled { summary } => {
+                assert_eq!(summary.seeds_processed, 0);
+                assert_eq!(summary.cancelled_at_seed, Some(0));
+            }
+            other => panic!("expected cancelled, got {other:?}"),
+        }
     }
 }

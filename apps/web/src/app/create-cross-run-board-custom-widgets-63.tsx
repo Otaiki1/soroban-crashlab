@@ -83,17 +83,14 @@ interface Props {
 }
 
 export default function CrossRunBoardCustomWidgets({ runs = [] }: Props) {
-  const [widgets, setWidgets] = useState<CustomWidget[]>([]);
+  const [widgets, setWidgets] = useState<CustomWidget[]>(() => loadWidgets());
   const [adding, setAdding] = useState(false);
   const [newMetric, setNewMetric] = useState<WidgetMetric>("total-runs");
   const [newLabel, setNewLabel] = useState("");
   const [newColor, setNewColor] = useState<WidgetColor>("blue");
   const dragIdx = useRef<number | null>(null);
 
-  // Load saved widgets on mount
-  useEffect(() => {
-    setWidgets(loadWidgets());
-  }, []);
+
 
   // Persist whenever widgets change (skip initial empty render)
   const mounted = useRef(false);

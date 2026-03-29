@@ -19,6 +19,13 @@ export interface CrashDetail {
     replayAction: string;
 }
 
+export interface RunIssueLink {
+    /** Display label for the issue reference */
+    label: string;
+    /** Fully qualified URL for the issue */
+    href: string;
+}
+
 /**
  * Interface representing a single fuzzing run.
  */
@@ -43,6 +50,52 @@ export interface FuzzingRun {
     memoryBytes: number;
     /** Minimum resource fee measured for the run */
     minResourceFee: number;
+    /** Timestamp when the run was queued */
+    queuedAt?: string;
+    /** Timestamp when the run started */
+    startedAt?: string;
+    /** Timestamp when the run reached a final state */
+    finishedAt?: string;
+    /** Related issue tracker entries for the run */
+    associatedIssues?: RunIssueLink[];
+}
+
+/**
+ * Represents a single crash event for trend analysis.
+ */
+export interface CrashEvent {
+    /** Crash signature (stable hash) */
+    signature: string;
+    /** ISO date string (YYYY-MM-DD) */
+    date: string;
+    /** Product area */
+    area: RunArea;
+    /** Severity level */
+    severity: RunSeverity;
+}
+
+/**
+ * Metadata for a unique signature in the dataset.
+ */
+export interface SignatureFrequency {
+    /** Crash signature identifier */
+    signature: string;
+    /** Total count across all time periods */
+    totalCount: number;
+    /** Primary area associated with this signature */
+    area: RunArea;
+    /** Highest severity observed for this signature */
+    severity: RunSeverity;
+}
+
+/**
+ * Data point for chart rendering (one per day bucket).
+ */
+export interface CrashTrendPoint {
+    /** ISO date (YYYY-MM-DD) */
+    date: string;
+    /** Signature counts keyed by signature identifier */
+    [signatureKey: string]: string | number;
 }
 
 export type LedgerChangeType = 'created' | 'updated' | 'deleted';

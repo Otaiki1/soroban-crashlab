@@ -3,21 +3,49 @@
 import Link from 'next/link';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import RunHistoryTable from './RunHistoryTable';
+import RunHistoryTable from './implement-run-history-table-component';
 import RunHistoryTableSkeleton from './RunHistoryTableSkeleton';
 import Pagination from './Pagination';
 import CrashDetailDrawer from './CrashDetailDrawer';
-import { FuzzingRun, RunStatus } from './types';
+import { FuzzingRun, RunStatus, RunArea, RunSeverity } from './types';
 import ReportModal from './ReportModal';
 import { generateMarkdownReport } from './report-utils';
 import CreateRunHeatmapPage55 from './create-run-heatmap-page-55';
+import AddRunComparisonCharts from './add-run-comparison-charts';
+import AddTaggingAndLabelsUi from './add-tagging-and-labels-ui';
 import AlertingSettingsPage54 from './implement-alerting-settings-page-54';
-import { FuzzingRun, RunStatus } from './types';
+import AlertingSettingsPage from './create-alerting-settings-page-page';
 import CrossRunBoardWidgets from './implement-cross-run-board-widgets-component';
 import CrossRunBoardCustomWidgets from './create-cross-run-board-custom-widgets-63';
 import RunClusterVisualization from './add-run-cluster-visualization';
 import RunClusterOverview from './add-run-cluster-overview';
 import ImplementRunWorkflowBoardPage58 from './implement-run-workflow-board-page-58';
+import FailureClusterView from './FailureClusterView';
+import MaintainerToggle from './MaintainerToggle';
+import { useMaintainerMode } from './useMaintainerMode';
+import AlertPresets from './AlertPresets';
+import CreateReportingTemplatesPage60 from './create-reporting-templates-page-60';
+import TimelineScrubber from './implement-timeline-scrubber-component-component';
+import ColumnCustomization, { ColumnId } from './add-column-customization';
+import IssueTriageBoard from './add-issue-triage-board-ui';
+import CampaignMilestoneTimeline from './campaign-milestone-timeline-55';
+import VirtualizedRunTable from './implement-virtualized-run-table-component';
+import ReportingTemplatesManager from './add-reporting-templates-manager';
+import AutomatedRegressionDeployIntegration from './integrate-automated-regression-deploy-integration';
+import ReportGenerator from './add-report-generator';
+import WidgetLayoutEditor from './implement-widget-layout-editor-component';
+import AddRunStatusTimeline from './add-run-status-timeline';
+import AddExportRunJson from './add-export-run-json';
+import AddExportRunCsv from './add-export-run-csv';
+import IntegrateWebhookManagerForRunEvents from './integrate-webhook-manager-for-run-events';
+import MetricsExportToPrometheus from './integrate-metrics-export-to-prometheus';
+import LogViewer from './implement-log-viewer-component';
+import AddAccessibleKeyboardNavBlueprint from './add-accessible-keyboard-nav-blueprint';
+import ArtifactExplorer from './add-artifact-explorer';
+import RunSeverityFilter from './add-run-filtering-by-severity';
+import AddRunTimeline from './add-run-timeline';
+import OnboardingChecklistModal from './implement-onboarding-checklist-modal-component';
+import FailureClassificationTaxonomy from './add-failure-classification-taxonomy';
 
 // Mock data for demonstration
 const MOCK_RUNS: FuzzingRun[] = Array.from({ length: 25 }, (_, i) => ({
@@ -30,8 +58,6 @@ const MOCK_RUNS: FuzzingRun[] = Array.from({ length: 25 }, (_, i) => ({
   cpuInstructions: Math.floor(400000 + Math.random() * 900000),
   memoryBytes: Math.floor(1_500_000 + Math.random() * 8_000_000),
   minResourceFee: Math.floor(500 + Math.random() * 5000),
-  area: 'auth' as any,
-  severity: 'low' as any,
   crashDetail: i % 4 === 1
     ? {
       failureCategory: i % 8 === 1 ? 'Panic' : 'InvariantViolation',
@@ -55,6 +81,8 @@ const CPU_WARNING = 900_000;
 const MEMORY_WARNING = 7_000_000;
 const FEE_WARNING = 3_000;
 const STATUS_OPTIONS: Array<'all' | RunStatus> = ['all', 'running', 'completed', 'failed', 'cancelled'];
+const ONBOARDING_SEEN_STORAGE_KEY = 'crashlab:onboarding-checklist-seen:v1';
+const ONBOARDING_DISMISSED_STORAGE_KEY = 'crashlab:onboarding-checklist-dismissed:v1';
 
 const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
@@ -84,13 +112,19 @@ function HomeContent() {
   const [selectedCardIndex, setSelectedCardIndex] = useState(0);
   const [showDetailView, setShowDetailView] = useState(false);
   const [showHelp, setShowHelp] = useState(true);
+  const [showOnboardingChecklist, setShowOnboardingChecklist] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [reportRun, setReportRun] = useState<FuzzingRun | null>(null);
   const cardsContainerRef = useRef<HTMLDivElement>(null);
+  const { isMaintainer, toggle: toggleMaintainerMode, mounted: maintainerMounted } = useMaintainerMode();
+  const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(['id', 'status', 'duration', 'seedCount', 'report']);
 
   const selectedRunId = searchParams.get('run');
   const statusFilter = STATUS_OPTIONS.includes((searchParams.get('status') ?? 'all') as 'all' | RunStatus)
     ? ((searchParams.get('status') ?? 'all') as 'all' | RunStatus)
+    : 'all';
+  const severityFilter = (['all', 'low', 'medium', 'high', 'critical'].includes(searchParams.get('severity') ?? 'all'))
+    ? (searchParams.get('severity') ?? 'all') as 'all' | RunSeverity
     : 'all';
   const expensiveOnly = searchParams.get('expensive') === '1';
   const pageParam = Number.parseInt(searchParams.get('page') ?? '1', 10);
@@ -124,6 +158,9 @@ function HomeContent() {
       if (statusFilter !== 'all' && run.status !== statusFilter) {
         return false;
       }
+      if (severityFilter !== 'all' && run.severity !== severityFilter) {
+        return false;
+      }
       if (expensiveOnly && !isExpensiveRun(run)) {
         return false;
       }
@@ -134,6 +171,24 @@ function HomeContent() {
     () => toStableQueryString(new URLSearchParams(searchParams.toString())),
     [searchParams],
   );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const hasSeenOnboarding = localStorage.getItem(ONBOARDING_SEEN_STORAGE_KEY) === 'true';
+        const hasDismissedOnboarding = localStorage.getItem(ONBOARDING_DISMISSED_STORAGE_KEY) === 'true';
+
+        if (!hasSeenOnboarding && !hasDismissedOnboarding) {
+          localStorage.setItem(ONBOARDING_SEEN_STORAGE_KEY, 'true');
+          setShowOnboardingChecklist(true);
+        }
+      } catch {
+        setShowOnboardingChecklist(true);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const totalPages = Math.max(1, Math.ceil(filteredRuns.length / ITEMS_PER_PAGE));
   const clampedPage = Math.min(currentPage, totalPages);
@@ -165,7 +220,7 @@ function HomeContent() {
           ctrl.signal.addEventListener('abort', () => window.clearTimeout(t));
         });
         if (!cancelled) {
-          setRuns(buildMockRuns());
+          setRuns(MOCK_RUNS);
           setDataState('success');
         }
       } catch {
@@ -200,7 +255,24 @@ function HomeContent() {
 
   const handleCloseRunDrawer = useCallback(() => setQueryState({ run: null }), [setQueryState]);
 
-  const handleReplayComplete = useCallback((newRun: FuzzingRun) => {
+  const handleReplayComplete = useCallback((data: FuzzingRun | { id: string; status: 'running' }) => {
+    let newRun: FuzzingRun;
+    if ('area' in data) {
+      newRun = data;
+    } else {
+      newRun = {
+        id: data.id,
+        status: 'running',
+        area: 'state',
+        severity: 'medium',
+        duration: 0,
+        seedCount: 0,
+        crashDetail: null,
+        cpuInstructions: 0,
+        memoryBytes: 0,
+        minResourceFee: 0,
+      };
+    }
     setRuns((prev) => [newRun, ...prev]);
   }, []);
 
@@ -300,18 +372,59 @@ function HomeContent() {
     setShowDetailView(true);
   };
 
+  const handleOpenOnboardingChecklist = useCallback(() => {
+    setShowOnboardingChecklist(true);
+    try {
+      localStorage.setItem(ONBOARDING_SEEN_STORAGE_KEY, 'true');
+      localStorage.setItem(ONBOARDING_DISMISSED_STORAGE_KEY, 'false');
+    } catch {
+      // ignore storage write errors
+    }
+  }, []);
+
+  const handleCloseOnboardingChecklist = useCallback(() => {
+    setShowOnboardingChecklist(false);
+    try {
+      localStorage.setItem(ONBOARDING_DISMISSED_STORAGE_KEY, 'true');
+    } catch {
+      // ignore storage write errors
+    }
+  }, []);
+
   return (
-    <div className="flex flex-col items-center justify-center py-20 px-8 max-w-5xl mx-auto w-full">
-      {/* Cross-run board widgets section */}
-      <div className="w-full mb-12">
-        <CrossRunBoardWidgets />
-        <CrossRunBoardCustomWidgets runs={runs} />
+    <div className="min-h-screen w-full">
+      <AddAccessibleKeyboardNavBlueprint />
+      <div id="main-content" className="flex flex-col items-center justify-center py-20 px-8 max-w-5xl mx-auto w-full">
+      {/* Role toggle */}
+      <div className="w-full flex flex-wrap justify-end gap-3 mb-6">
+        <button
+          type="button"
+          onClick={handleOpenOnboardingChecklist}
+          className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200 dark:hover:border-blue-800 dark:hover:bg-blue-950/60"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Onboarding checklist
+        </button>
+        <MaintainerToggle
+          isMaintainer={isMaintainer}
+          onToggle={toggleMaintainerMode}
+          mounted={maintainerMounted}
+        />
       </div>
 
       {/* Run workflow board section */}
       <div className="w-full mb-12">
         <ImplementRunWorkflowBoardPage58 runs={runs} />
       </div>
+      {/* Cross-run board widgets section — maintainer only */}
+      {isMaintainer && (
+        <div className="w-full mb-12">
+          <CrossRunBoardWidgets />
+          <CrossRunBoardCustomWidgets runs={runs} />
+        </div>
+      )}
 
       <div className="text-center max-w-3xl mb-16">
         <h1 className="text-5xl font-bold tracking-tight mb-6 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
@@ -458,10 +571,32 @@ function HomeContent() {
         })}
       </div>
 
-      <div className="w-full mb-8">
+      {dataState === 'success' && (
+        <>
+          <TimelineScrubber runs={runs} onSelectRun={handleOpenRunDrawer} />
+          <AddRunTimeline runs={runs} onSelectRun={handleOpenRunDrawer} />
+          <div className="mt-12 w-full">
+            <AddRunStatusTimeline runs={runs} />
+          </div>
+          <div className="mt-12 w-full">
+            <LogViewer />
+          </div>
+        </>
+      )}
+
+      {dataState === 'loading' && (
+        <div className="w-full h-48 rounded-xl bg-zinc-100 dark:bg-zinc-800 animate-pulse mb-6" />
+      )}
+      {dataState === 'success' && <RunClusterOverview runs={runs} />}
+
+      <div id="recent-runs" className="w-full mb-8 scroll-mt-8">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold">Recent Fuzzing Runs</h2>
           <div className="flex items-center gap-3">
+            <ColumnCustomization 
+              visibleColumns={visibleColumns} 
+              onChange={setVisibleColumns} 
+            />
             <button
               type="button"
               onClick={handleCopyPermalink}
@@ -490,7 +625,11 @@ function HomeContent() {
               <option value="cancelled">Cancelled</option>
             </select>
           </label>
-          <label className="inline-flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+          <RunSeverityFilter 
+            value={severityFilter} 
+            onChange={(val) => setQueryState({ severity: val === 'all' ? null : val, page: null })} 
+          />
+          <label className="inline-flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300 group cursor-pointer">
             <input
               type="checkbox"
               checked={expensiveOnly}
@@ -511,34 +650,47 @@ function HomeContent() {
           <p className="mb-3 text-sm text-red-700 dark:text-red-400">Could not copy link. Copy the URL from your browser address bar.</p>
         )}
 
-        <div className="mb-5 border border-amber-200 dark:border-amber-900/50 rounded-xl p-4 bg-amber-50/70 dark:bg-amber-950/20">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200">Resource Fee Insight</h3>
-            <span className="text-xs text-amber-800 dark:text-amber-300">
-              thresholds: cpu &ge; {CPU_WARNING.toLocaleString()}, mem &ge; {formatBytes(MEMORY_WARNING)}, fee &ge; {formatFee(FEE_WARNING)}
-            </span>
-          </div>
+        {isMaintainer && (
+          <div className="mb-5 border border-amber-200 dark:border-amber-900/50 rounded-xl p-4 bg-amber-50/70 dark:bg-amber-950/20">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200">Resource Fee Insight</h3>
+              <span className="text-xs text-amber-800 dark:text-amber-300">
+                thresholds: cpu &ge; {CPU_WARNING.toLocaleString()}, mem &ge; {formatBytes(MEMORY_WARNING)}, fee &ge; {formatFee(FEE_WARNING)}
+              </span>
+            </div>
 
-          {expensiveRuns.length === 0 ? (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">No expensive runs on this page.</p>
-          ) : (
-            <ul className="space-y-2">
-              {expensiveRuns.map((run) => (
-                <li key={run.id} className="text-sm flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white/60 dark:bg-zinc-900/40 rounded-lg px-3 py-2 border border-amber-100 dark:border-amber-900/40">
-                  <div className="font-mono text-zinc-800 dark:text-zinc-200">{run.id}</div>
-                  <div className="text-zinc-700 dark:text-zinc-300">
-                    cpu {run.cpuInstructions.toLocaleString()} &middot; mem {formatBytes(run.memoryBytes)} &middot; min fee {formatFee(run.minResourceFee)}
-                  </div>
-                  <Link href={`/runs/${run.id}`} className="text-amber-700 dark:text-amber-300 hover:underline underline-offset-4 font-medium">
-                    View run details
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+            {expensiveRuns.length === 0 ? (
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">No expensive runs on this page.</p>
+            ) : (
+              <ul className="space-y-2">
+                {expensiveRuns.map((run) => (
+                  <li key={run.id} className="text-sm flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white/60 dark:bg-zinc-900/40 rounded-lg px-3 py-2 border border-amber-100 dark:border-amber-900/40">
+                    <div className="font-mono text-zinc-800 dark:text-zinc-200">{run.id}</div>
+                    <div className="text-zinc-700 dark:text-zinc-300">
+                      cpu {run.cpuInstructions.toLocaleString()} &middot; mem {formatBytes(run.memoryBytes)} &middot; min fee {formatFee(run.minResourceFee)}
+                    </div>
+                    <Link href={`/runs/${run.id}`} className="text-amber-700 dark:text-amber-300 hover:underline underline-offset-4 font-medium">
+                      View run details
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {isMaintainer && (
+          <FailureClusterView runs={runs} pathname={pathname} queryString={stableQueryString} />
+        )}
+        <div className="mb-8 w-full">
+          <CampaignMilestoneTimeline campaignId="campaign-001" autoUpdateInterval={5000} maxEventsDisplayed={10} />
         </div>
-        <FailureClusterView runs={runs} pathname={pathname} queryString={stableQueryString} />
-        <RunHistoryTable runs={paginatedRuns} onSelectRun={handleOpenRunDrawer} onViewReport={setReportRun} />
+        <RunHistoryTable 
+          runs={paginatedRuns} 
+          onSelectRun={handleOpenRunDrawer} 
+          onViewReport={setReportRun} 
+          onReplayRun={handleReplayComplete}
+          visibleColumns={visibleColumns}
+        />
         {dataState === 'loading' && (
           <RunHistoryTableSkeleton rows={ITEMS_PER_PAGE} />
         )}
@@ -570,15 +722,115 @@ function HomeContent() {
           totalPages={totalPages}
           onPageChange={handlePageChange}
         />
+
+        <div className="mt-12 w-full">
+          <ArtifactExplorer />
+        </div>
+
+        {/* Virtualized run table — renders all filtered runs without pagination */}
+        {dataState === 'success' && filteredRuns.length > 0 && (
+          <div className="mt-10">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-bold">Virtualized Run Table</h3>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  All {filteredRuns.length} runs rendered in a single scrollable viewport — only visible rows are in the DOM.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Virtualized
+              </span>
+            </div>
+            <VirtualizedRunTable
+              runs={filteredRuns}
+              viewportHeight={480}
+              onSelectRun={handleOpenRunDrawer}
+              onViewReport={setReportRun}
+              visibleColumns={visibleColumns}
+            />
+          </div>
+        )}
+
+        {/* Report Generator Section */}
+        {dataState === 'success' && (
+          <div className="mt-12 w-full">
+            <ReportGenerator availableRuns={runs} />
+          </div>
+        )}
+      </div>
+
+      <div className="mb-12 w-full grid grid-cols-1 md:grid-cols-2 gap-8">
+        <AddExportRunJson runs={filteredRuns} />
+        <AddExportRunCsv runs={filteredRuns} />
       </div>
 
       <div className="mb-12 w-full">
-        <CreateRunHeatmapPage55 />
+        <AddRunComparisonCharts runs={filteredRuns} />
       </div>
 
       <div className="mb-12 w-full">
-        <AlertingSettingsPage54 />
+        <RunClusterVisualization 
+          runs={filteredRuns} 
+          onRunSelect={handleOpenRunDrawer}
+          showTimeline={true}
+          showMetrics={true}
+        />
       </div>
+
+      <div className="mb-12 w-full">
+        <FailureClassificationTaxonomy runs={filteredRuns} />
+      </div>
+
+      <div className="mb-12 w-full">
+        <AddTaggingAndLabelsUi runs={filteredRuns} />
+      </div>
+
+      <div className="mb-12 w-full">
+        <IssueTriageBoard runs={runs} />
+      </div>
+
+      <div className="mb-12 w-full">
+        <AlertPresets onSelectPreset={(config) => console.log('Applied Alert Preset:', config)} />
+      </div>
+
+      <div className="mb-12 w-full">
+        <CreateReportingTemplatesPage60 />
+      </div>
+
+      <div className="mb-12 w-full">
+        <ReportingTemplatesManager />
+      </div>
+
+      <div className="mb-12 w-full">
+        <AutomatedRegressionDeployIntegration />
+      </div>
+
+      {isMaintainer && (
+        <div className="mb-12 w-full">
+          <CreateRunHeatmapPage55 />
+        </div>
+      )}
+
+      {isMaintainer && (
+        <div className="mb-12 w-full">
+          <AlertingSettingsPage54 />
+        </div>
+      )}
+
+      {isMaintainer && (
+        <div className="mb-12 w-full">
+          <WidgetLayoutEditor />
+        </div>
+      )}
+
+      {isMaintainer && (
+        <div className="mb-12 w-full">
+          <AlertingSettingsPage />
+        </div>
+      )}
 
       {showDetailView && (
         <div
@@ -644,6 +896,11 @@ function HomeContent() {
         />
       )}
 
+      <OnboardingChecklistModal
+        isOpen={showOnboardingChecklist}
+        onClose={handleCloseOnboardingChecklist}
+      />
+
       {selectedRun && (
         <CrashDetailDrawer
           key={selectedRun.id}
@@ -652,6 +909,14 @@ function HomeContent() {
           onReplayComplete={handleReplayComplete}
         />
       )}
+
+      <div className="mb-12 w-full">
+        <MetricsExportToPrometheus />
+      </div>
+
+      <div className="mt-12 mb-16 w-full">
+        <IntegrateWebhookManagerForRunEvents />
+      </div>
 
       <div className="mt-16 text-center border-t border-black/[.08] dark:border-white/[.145] pt-12 w-full">
         <h2 className="text-2xl font-bold mb-4">Stellar Wave 3 is Open!</h2>
@@ -676,6 +941,7 @@ function HomeContent() {
             Star the Repo
           </a>
         </div>
+      </div>
       </div>
     </div>
   );
