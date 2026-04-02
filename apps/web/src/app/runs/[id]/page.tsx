@@ -103,6 +103,24 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
                     </div>
                 </section>
 
+                {run.annotations && run.annotations.length > 0 && (
+                    <section className="mb-8 border border-indigo-200 dark:border-indigo-900/50 rounded-xl p-6 bg-indigo-50/30 dark:bg-indigo-950/20">
+                        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                            </svg>
+                            Run Annotations
+                        </h2>
+                        <ul className="space-y-3">
+                            {run.annotations.map((note, index) => (
+                                <li key={index} className="text-sm text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-950/60 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/40 shadow-sm leading-relaxed">
+                                    {note}
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                )}
+
                 <section>
                     <h2 className="text-lg font-semibold mb-3">Ledger State Change Diff</h2>
                     <div className="space-y-3">

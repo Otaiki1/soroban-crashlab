@@ -58,6 +58,8 @@ export interface FuzzingRun {
     finishedAt?: string;
     /** Related issue tracker entries for the run */
     associatedIssues?: RunIssueLink[];
+    /** Custom annotations and notes for the run */
+    annotations?: string[];
 }
 
 /**

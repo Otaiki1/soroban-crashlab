@@ -50,6 +50,7 @@ import FailureClassificationTaxonomy from './add-failure-classification-taxonomy
 import AddAFuzzyQueryBuilderPage51 from './add-a-fuzzy-query-builder-page-51';
 import AddResponsiveLayoutImprovements from './add-responsive-layout-improvements';
 import AddKeyboardNavigationHelp from './add-keyboard-navigation-help';
+import AddRunAnnotations from './add-run-annotations';
 
 // Mock data for demonstration
 const MOCK_RUNS: FuzzingRun[] = Array.from({ length: 25 }, (_, i) => ({
@@ -705,7 +706,7 @@ function HomeContent() {
       </div>
 
       <div className="mb-12 w-full">
-        <IssueTriageBoard runs={runs} />
+        <AddRunAnnotations runs={runs} />
       </div>
 
       <div className="mb-12 w-full">
