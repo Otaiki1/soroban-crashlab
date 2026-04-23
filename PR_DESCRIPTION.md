@@ -1,123 +1,89 @@
-# feat: implement 4 frontend dashboard components
+# feat: Add live run progress timeline
+
+Closes #499
 
 ## Summary
 
-This PR implements 4 new frontend dashboard components to improve the user experience and functionality of the Soroban CrashLab dashboard.
+Implements a deterministic live run progress timeline for the dashboard that incrementally streams campaign milestone and failure discovery events from shared `FuzzingRun` data, with explicit loading/error states, pause/resume markers, and responsive/keyboard-accessible controls.
 
-## Tasks Completed
+## What changed
 
-### ✅ Task 1: Create Advanced dashboard filters page
-- **File**: `apps/web/src/app/create-advanced-dashboard-filters-page.tsx`
-- **Features**:
-  - Comprehensive filtering options for runs (status, area, severity, date range, duration, resource fees)
-  - Search functionality for run IDs, signatures, and keywords
-  - Collapsible advanced filters with simple/advanced view toggle
-  - Real-time active filter count display
-  - Reset all filters functionality
+### `apps/web/src/app/campaign-milestone-timeline-55.tsx`
 
-### ✅ Task 2: Add Bulk actions for runs
-- **File**: `apps/web/src/app/add-bulk-actions-for-runs.tsx`
-- **Features**:
-  - Support for bulk operations: cancel, retry, delete, export, tag, assign
-  - Dynamic action availability based on run statuses
-  - Modal dialogs for complex actions (export format selection, tagging, assignment)
-  - Selection management with clear functionality
-  - Action descriptions and tooltips for better UX
+- Replaced random simulated timeline generation with run-driven incremental updates.
+- Added explicit `dataState` handling (`loading`, `error`, `success`) with dedicated UI states.
+- Added retry wiring for timeline stream failures.
+- Added pause/resume marker insertion in the event feed.
+- Added `aria-live` event log semantics and `aria-pressed` control states for accessibility.
+- Preserved responsive layout behavior for controls and event summary row.
 
-### ✅ Task 3: Implement Resource fee insight panel component
-- **File**: `apps/web/src/app/implement-resource-fee-insight-panel-component.tsx`
-- **Features**:
-  - Comprehensive resource fee statistics (average, median, min/max, total)
-  - Fee distribution visualization with color-coded categories
-  - Time-based filtering (7d, 30d, 90d, all time)
-  - Multiple view modes: overview, trends, breakdown
-  - Daily and weekly trend charts
-  - Area and severity breakdown analysis
-  - Responsive design with proper data formatting
+### `apps/web/src/app/campaign-milestone-timeline-utils.ts` (new)
 
-### ✅ Task 4: Create Run issue link page
-- **File**: `apps/web/src/app/create-run-issue-link-page-page.tsx`
-- **Features**:
-  - Run selection with detailed information display
-  - Issue linking with support for GitHub, GitLab, Jira, Linear, and custom URLs
-  - URL validation and automatic issue type detection
-  - Issue management (add, remove, save)
-  - Recent issues overview
-  - Tips and quick actions panel
-  - Two-column layout for optimal space usage
+- Added pure utility layer for deterministic, testable timeline behavior:
+  - `sortRunsForTimeline(runs)`
+  - `buildCampaignLifecycleEvent(campaignId, type)`
+  - `buildRunProgressEvent(run, knownSignatures)`
+  - `selectNextUnseenRun(runs, seenRunIds)`
+  - `prependCappedEvent(events, event, maxEventsDisplayed)`
+- Added shared `MilestoneEvent` / `MilestoneEventType` contracts for module coordination.
 
-## Technical Details
+### `apps/web/src/app/page.tsx`
 
-### Component Architecture
-- All components follow React functional component patterns
-- TypeScript interfaces for type safety
-- Custom hooks for state management and calculations
-- Responsive design using Tailwind CSS
+- Wired `CampaignMilestoneTimeline` to dashboard state contracts:
+  - `runs={runs}`
+  - `dataState={dataState}`
+  - `onRetry={() => setFetchAttempt((n) => n + 1)}`
+  - explicit timeline `errorMessage`
 
-### Key Features
-- **Type Safety**: Full TypeScript implementation with proper interfaces
-- **Accessibility**: Semantic HTML and ARIA attributes where applicable
-- **Performance**: Optimized re-renders using useCallback and useMemo
-- **User Experience**: Loading states, error handling, and intuitive interactions
-- **Data Visualization**: Charts and progress indicators for insights
+### `apps/web/src/app/campaign-milestone-timeline-utils.test.ts` (new)
 
-### Integration Points
-- Components are designed to integrate with existing `FuzzingRun` type structure
-- Consistent styling with the existing design system
-- Props interfaces allow for easy integration with parent components
+- Added unit tests for:
+  - run sorting order
+  - failure event mapping and re-observed signature behavior
+  - unseen-run incremental selection
+  - capped prepend behavior
+- Added integration/regression path that validates replay placeholder runs map into timeline `run_update` events.
 
-## Files Changed
+### `apps/web/src/app/page.integration.test.ts`
 
-### New Files Created
-- `apps/web/src/app/create-advanced-dashboard-filters-page.tsx` (295 lines)
-- `apps/web/src/app/add-bulk-actions-for-runs.tsx` (246 lines)
-- `apps/web/src/app/implement-resource-fee-insight-panel-component.tsx` (317 lines)
-- `apps/web/src/app/create-run-issue-link-page-page.tsx` (317 lines)
+- Added cross-module regression coverage for issue #499:
+  - deterministic unseen-run progression
+  - replay placeholder (`replay-ui-utils`) → timeline event mapping
 
-### Total Impact
-- **4 new component files**
-- **1,267 lines of code added**
-- **0 existing files modified**
+## Design note
 
-## Testing
+**Tradeoff**: Timeline updates are generated from existing in-memory run data and emitted incrementally at a configurable interval instead of opening a backend stream in this issue.
 
-Components include:
-- Input validation and error handling
-- Edge case handling (empty states, no data scenarios)
-- Responsive design considerations
-- Accessibility features
+**Alternative considered**: Introduce websocket/SSE-backed timeline transport now. Deferred to follow-up to keep issue scope focused on UI behavior and shared type integration.
 
-## Screenshots/Demos
+**Rollback path**: Revert this commit to restore previous timeline rendering behavior and remove utility-based event generation.
 
-*(Note: Actual screenshots would be added here after testing)*
+## Validation
 
-## Acceptance Criteria Met
+```bash
+cd apps/web && npx jest src/app/campaign-milestone-timeline-utils.test.ts src/app/page.integration.test.ts --no-cache
+```
 
-✅ **Advanced dashboard filters is visible and functional in the dashboard**
-✅ **Bulk actions for runs is visible and functional in the dashboard**  
-✅ **Resource fee insight panel is visible and functional in the dashboard**
-✅ **Run issue link page is visible and functional in the dashboard**
+- ✅ 28/28 tests passing
 
-## Next Steps
+```bash
+cd apps/web && npm run lint
+```
 
-- Integration of these components into the main dashboard layout
-- Testing with real data and API endpoints
-- Performance optimization if needed
-- User feedback collection and iterations
+- ⚠ Fails due to pre-existing unrelated baseline issues (e.g. `integrate-sentry-integration-for-crash-reporting.tsx` and pre-existing `page.tsx` memoization dependency warning)
+
+```bash
+cd apps/web && npm run build
+```
+
+- ⚠ Fails due to pre-existing unrelated baseline TypeScript error in `add-accessible-keyboard-nav-blueprint-page-49.tsx:253` (`handleReset` not defined)
 
 ## Checklist
 
-- [x] Code follows project style guidelines
-- [x] Components are properly typed with TypeScript
-- [x] Responsive design implemented
-- [x] Accessibility considerations included
-- [x] Error handling implemented
-- [x] Documentation provided
-- [x] All acceptance criteria met
-
----
-
-**Priority**: Medium  
-**Area**: area:web  
-**Components**: 4 new dashboard components  
-**Lines of Code**: 1,267
+- [x] Timeline updates incrementally and supports pause/resume markers
+- [x] Explicit loading/error timeline states implemented with retry affordance
+- [x] Keyboard accessibility preserved for timeline controls and event feed focus
+- [x] Responsive behavior preserved for controls and event metadata layout
+- [x] Unit tests added for primary utility logic and edge behavior
+- [x] Integration/regression coverage added for cross-module replay-to-timeline flow
+- [x] Existing behavior outside issue scope preserved
