@@ -156,6 +156,9 @@ pub mod rpc_envelope;
 pub use rpc_envelope::{RpcEnvelopeCapture, RpcRequestEnvelope, RpcResponseEnvelope};
 
 pub mod stellar_address;
+
+#[cfg(test)]
+mod threat_model_tests;
 pub use stellar_address::{
     AddressMutatorConfig, AddressType, StellarAddressMutator, generate_address_vectors,
 };
